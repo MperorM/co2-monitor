@@ -79,7 +79,6 @@ class _BluetoothAppState extends State<BluetoothApp> {
       }
       catch (exception) {
           print('Cannot connect, exception occured');
-          print(exception);
           sleep(Duration(seconds: 1));
       }
     }
