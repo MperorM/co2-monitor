@@ -4,9 +4,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_blue/gen/flutterblue.pbserver.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:flutter_blue/flutter_blue.dart';
-
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// import 'package:flutter_blue/flutter_blue.dart';
 
 
 void main() => runApp(MyApp());
@@ -37,7 +38,7 @@ class MyApp extends StatelessWidget {
 class BluetoothApp extends StatefulWidget {
   BluetoothApp({Key key, this.title}) : super(key: key);
 
-  // This widget is the home page of your application. It is stateful, meaning
+  // This widget is the home page of your application. It is stateful, meanig
   // that it has a State object (defined below) that contains fields that affect
   // how it looks.
 
@@ -53,7 +54,9 @@ class BluetoothApp extends StatefulWidget {
 }
 
 class _BluetoothAppState extends State<BluetoothApp> {
-  int _counter = 0;
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
+  // FlutterBlue flutterBlue = FlutterBlue.instance;
+
   int co2 = 0;
   BluetoothConnection connection;
 
@@ -61,33 +64,53 @@ class _BluetoothAppState extends State<BluetoothApp> {
   void initState() {
     _makeConnection();
     super.initState();
+    // initialise the plugin. app_icon needs to be a added as a drawable resource to the Android head project   
+     // If you have skipped STEP 3 then change app_icon to @mipmap/ic_launcher
+    var initializationSettingsAndroid =
+        new AndroidInitializationSettings('app_icon'); 
+    var initializationSettingsIOS = new IOSInitializationSettings();
+    var initializationSettings = new InitializationSettings(initializationSettingsAndroid, initializationSettingsIOS);
+    flutterLocalNotificationsPlugin = new FlutterLocalNotificationsPlugin();
+    flutterLocalNotificationsPlugin.initialize(initializationSettings, onSelectNotification: onSelectNotification);
+
+    // _scheduleNotification();
+  }
+
+
+  Future onSelectNotification(String payload) async {
+    showDialog(
+      context: context,
+      builder: (_) {
+        return new AlertDialog(
+          title: Text("PayLoad"),
+          content: Text("Payload : $payload"),
+        );
+      },
+    );
   }
 
   void _makeConnection() async {
     // Some simplest connection :F
     for (int i = 0; i < 5; i++) {
       try {
-          connection = await BluetoothConnection.toAddress("DC:A6:32:1F:4D:13");
-          print('Connected to the device');
-          connection.input.listen((Uint8List data) {
-            setState(() {
-              co2 = int.parse(ascii.decode(data));
-              print('Data incoming: ${ascii.decode(data)}');
-            });
+        connection = await BluetoothConnection.toAddress("DC:A6:32:1F:4D:13");
+        print('Connected to the device');
+        connection.input.listen((Uint8List data) {
+          setState(() {
+            int prev_c02 = co2;
+            co2 = int.parse(ascii.decode(data));
+            if (co2 > 1000 && prev_c02 < 1000) {
+              _showNotificationWithoutSound();
+            }
+            print('Data incoming: ${ascii.decode(data)}');
           });
-          break;
+        });
       }
       catch (exception) {
           print('Cannot connect, exception occured');
           sleep(Duration(seconds: 1));
       }
     }
-  }
-
-  void _incrementCounter() async {
-    setState(() {
-      _counter++;
-    });
   }
 
   @override
@@ -134,11 +157,44 @@ class _BluetoothAppState extends State<BluetoothApp> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
+  }
+  // Method 3
+  Future _showNotificationWithoutSound() async {
+    var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
+        'your channel id', 'your channel name', 'your channel description',
+        playSound: false, importance: Importance.Max, priority: Priority.High,
+        );
+    var iOSPlatformChannelSpecifics =
+        new IOSNotificationDetails(presentSound: false);
+    var platformChannelSpecifics = new NotificationDetails(
+        androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      'Time to open a window!',
+      'The co2 is $co2',
+      platformChannelSpecifics,
+      payload: 'No_Sound',
+    );
+  }
+
+  Future _scheduleNotification() async {
+    // Show a notification every minute with the first appearance happening a minute after invoking the method
+    _makeConnection();
+
+    var androidPlatformChannelSpecifics =
+        AndroidNotificationDetails('repeating channel id',
+            'repeating channel name', 'repeating description',
+        playSound: false, importance: Importance.Max, priority: Priority.High);
+    var iOSPlatformChannelSpecifics =
+        IOSNotificationDetails();
+    var platformChannelSpecifics = NotificationDetails(
+        androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.periodicallyShow(
+      0,
+      'Time to open a window!',
+      'The co2 is $co2',
+      RepeatInterval.EveryMinute,
+      platformChannelSpecifics);
   }
 }
